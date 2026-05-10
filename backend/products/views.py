@@ -164,6 +164,16 @@ class ProductViewSet(viewsets.ModelViewSet):
         if not file:
             return Response({"error": "No image provided."}, status=status.HTTP_400_BAD_REQUEST)
 
+        def save_local_image(upload_file):
+            from django.core.files.storage import default_storage
+            from django.core.files.base import ContentFile
+
+            ext = upload_file.name.rsplit(".", 1)[-1].lower()
+            unique_name = f"product_images/{uuid.uuid4()}.{ext}"
+            upload_file.seek(0)
+            default_storage.save(unique_name, ContentFile(upload_file.read()))
+            return request.build_absolute_uri(settings.MEDIA_URL + unique_name)
+
         supabase_url = settings.SUPABASE_URL
         supabase_key = settings.SUPABASE_SERVICE_KEY
         bucket = settings.SUPABASE_BUCKET
@@ -176,35 +186,46 @@ class ProductViewSet(viewsets.ModelViewSet):
                 unique_name = f"{uuid.uuid4()}.{ext}"
                 mime_type = mimetypes.guess_type(file.name)[0] or "image/jpeg"
                 file_bytes = file.read()
-                client.storage.from_(bucket).upload(
-                    unique_name,
-                    file_bytes,
-                    {"content_type": mime_type},
-                )
+
+                try:
+                    client.storage.from_(bucket).upload(
+                        unique_name,
+                        file_bytes,
+                        {"content_type": mime_type},
+                    )
+                except Exception as bucket_err:
+                    if "Bucket not found" in str(bucket_err):
+                        try:
+                            client.storage.create_bucket(bucket, {"public": True})
+                            client.storage.from_(bucket).upload(
+                                unique_name,
+                                file_bytes,
+                                {"content_type": mime_type},
+                            )
+                        except Exception as create_err:
+                            raise create_err
+                    else:
+                        raise bucket_err
+
                 public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{unique_name}"
                 return Response({"url": public_url}, status=status.HTTP_201_CREATED)
             except Exception as e:
-                import os
-                from django.core.files.storage import default_storage
-                from django.core.files.base import ContentFile
+                if settings.DEBUG:
+                    url = save_local_image(file)
+                    return Response({"url": url}, status=status.HTTP_201_CREATED)
+                return Response(
+                    {"error": "Image upload failed in production. Check SUPABASE_URL / SUPABASE_SERVICE_KEY and bucket permissions."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-                ext = file.name.rsplit(".", 1)[-1].lower()
-                unique_name = f"product_images/{uuid.uuid4()}.{ext}"
-                file.seek(0)
-                default_storage.save(unique_name, ContentFile(file.read()))
-                url = request.build_absolute_uri(settings.MEDIA_URL + unique_name)
-                return Response({"url": url}, status=status.HTTP_201_CREATED)
+        if settings.DEBUG:
+            url = save_local_image(file)
+            return Response({"url": url}, status=status.HTTP_201_CREATED)
 
-        # Fallback if Supabase not configured
-        import os
-        from django.core.files.storage import default_storage
-        from django.core.files.base import ContentFile
-
-        ext = file.name.rsplit(".", 1)[-1].lower()
-        unique_name = f"product_images/{uuid.uuid4()}.{ext}"
-        default_storage.save(unique_name, ContentFile(file.read()))
-        url = request.build_absolute_uri(settings.MEDIA_URL + unique_name)
-        return Response({"url": url}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"error": "Supabase storage is not configured in production. Set SUPABASE_URL and SUPABASE_SERVICE_KEY."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
