@@ -38,7 +38,7 @@ interface FieldProps {
   label: string;
   name: keyof ProductFormData;
   required?: boolean;
-  form: ProductFormData;
+  formData: ProductFormData;
   onChange: (field: keyof ProductFormData, value: unknown) => void;
 }
 
@@ -47,7 +47,7 @@ interface SelectProps {
   name: keyof ProductFormData;
   options: { value: string; label: string }[];
   required?: boolean;
-  form: ProductFormData;
+  formData: ProductFormData;
   onChange: (field: keyof ProductFormData, value: unknown) => void;
 }
 
@@ -59,7 +59,7 @@ interface IndicatorFieldProps {
 }
 
 // Define these OUTSIDE the component to prevent recreation on each render
-function Field({ label, name, required, form, onChange, ...rest }: FieldProps & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ label, name, required, formData, onChange, ...rest }: FieldProps & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'>) {
   return (
     <div>
       <label className="label">
@@ -67,7 +67,7 @@ function Field({ label, name, required, form, onChange, ...rest }: FieldProps & 
       </label>
       <input
         className="input"
-        value={String(form[name] ?? "")}
+        value={String(formData[name] ?? "")}
         onChange={(e) => onChange(name, e.target.value)}
         required={required}
         {...rest}
@@ -76,7 +76,7 @@ function Field({ label, name, required, form, onChange, ...rest }: FieldProps & 
   );
 }
 
-function Select({ label, name, options, required, form, onChange }: SelectProps) {
+function Select({ label, name, options, required, formData, onChange }: SelectProps) {
   return (
     <div>
       <label className="label">
@@ -84,7 +84,7 @@ function Select({ label, name, options, required, form, onChange }: SelectProps)
       </label>
       <select
         className="select"
-        value={String(form[name] ?? "")}
+        value={String(formData[name] ?? "")}
         onChange={(e) => onChange(name, e.target.value)}
         required={required}
       >
@@ -219,12 +219,12 @@ export default function ProductForm({ initial }: Props) {
       <div className="card p-6">
         <h2 className="font-semibold text-slate-800 mb-4">Core Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Field label="FG Code" name="fg_code" required placeholder="e.g. 6101981" disabled={!!initial} form={form} onChange={set} />
-          <Field label="Product Name" name="product_name" required placeholder="Full product name" form={form} onChange={set} />
-          <Field label="Category" name="category" required placeholder="e.g. Building Care" form={form} onChange={set} />
-          <Field label="Application" name="application" placeholder="e.g. Air Freshener" form={form} onChange={set} />
-          <Field label="Positioning" name="positioning" placeholder="e.g. Hard Package Air Freshener" form={form} onChange={set} />
-          <Field label="Product Hierarchy" name="product_hierarchy" placeholder="Hierarchy name" form={form} onChange={set} />
+          <Field label="FG Code" name="fg_code" required placeholder="e.g. 6101981" disabled={!!initial} formData={form} onChange={set} />
+          <Field label="Product Name" name="product_name" required placeholder="Full product name" formData={form} onChange={set} />
+          <Field label="Category" name="category" required placeholder="e.g. Building Care" formData={form} onChange={set} />
+          <Field label="Application" name="application" placeholder="e.g. Air Freshener" formData={form} onChange={set} />
+          <Field label="Positioning" name="positioning" placeholder="e.g. Hard Package Air Freshener" formData={form} onChange={set} />
+          <Field label="Product Hierarchy" name="product_hierarchy" placeholder="Hierarchy name" formData={form} onChange={set} />
         </div>
       </div>
 
@@ -237,21 +237,21 @@ export default function ProductForm({ initial }: Props) {
             { value: "Country", label: "Country" },
             { value: "Enhanced", label: "Enhanced" },
             { value: "Specialty", label: "Specialty" },
-          ]} form={form} onChange={set} />
-          <Field label="Geo Bucket" name="geo_bucket" placeholder="e.g. MEA Core, MEP Only" form={form} onChange={set} />
-          <Field label="Pack Size" name="pack_size" placeholder="e.g. 2.5Gal, 10L, 12x1L" form={form} onChange={set} />
+          ]} formData={form} onChange={set} />
+          <Field label="Geo Bucket" name="geo_bucket" placeholder="e.g. MEA Core, MEP Only" formData={form} onChange={set} />
+          <Field label="Pack Size" name="pack_size" placeholder="e.g. 2.5Gal, 10L, 12x1L" formData={form} onChange={set} />
           <Select label="Source" name="source" options={[
             { value: "EU", label: "EU" },
             { value: "TR", label: "TR" },
             { value: "UAE", label: "UAE" },
             { value: "US", label: "US" },
-          ]} form={form} onChange={set} />
-          <Field label="FC" name="fc" placeholder="e.g. Ex" form={form} onChange={set} />
+          ]} formData={form} onChange={set} />
+          <Field label="FC" name="fc" placeholder="e.g. Ex" formData={form} onChange={set} />
           <Select label="Status" name="status" options={[
             { value: "", label: "Active / Normal" },
             { value: "Evaluate", label: "Evaluate" },
             { value: "Discontinued", label: "Discontinued" },
-          ]} form={form} onChange={set} />
+          ]} formData={form} onChange={set} />
         </div>
 
         {/* Green toggle */}
