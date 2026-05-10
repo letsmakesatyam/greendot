@@ -24,7 +24,7 @@ product-catalog/
 
 ### Create the Storage bucket:
 - **Dashboard → Storage → New bucket**
-  - Name: `product-images`
+  - Name: `product-images` 
   - Toggle: **Public bucket** ✓
   - Click Create
 

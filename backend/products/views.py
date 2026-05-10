@@ -179,17 +179,23 @@ class ProductViewSet(viewsets.ModelViewSet):
                 client.storage.from_(bucket).upload(
                     unique_name,
                     file_bytes,
-                    {"content-type": mime_type},
+                    {"content_type": mime_type},
                 )
                 public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{unique_name}"
                 return Response({"url": public_url}, status=status.HTTP_201_CREATED)
             except Exception as e:
-                return Response(
-                    {"error": f"Supabase upload failed: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                import os
+                from django.core.files.storage import default_storage
+                from django.core.files.base import ContentFile
 
-        # Fallback: local media storage
+                ext = file.name.rsplit(".", 1)[-1].lower()
+                unique_name = f"product_images/{uuid.uuid4()}.{ext}"
+                file.seek(0)
+                default_storage.save(unique_name, ContentFile(file.read()))
+                url = request.build_absolute_uri(settings.MEDIA_URL + unique_name)
+                return Response({"url": url}, status=status.HTTP_201_CREATED)
+
+        # Fallback if Supabase not configured
         import os
         from django.core.files.storage import default_storage
         from django.core.files.base import ContentFile

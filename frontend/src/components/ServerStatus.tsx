@@ -8,6 +8,7 @@ type Status = "checking" | "online" | "offline";
 
 export default function ServerStatus() {
   const [status, setStatus] = useState<Status>("checking");
+  const [mounted, setMounted] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
   const check = async () => {
@@ -17,16 +18,16 @@ export default function ServerStatus() {
       setStatus("online");
     } catch {
       setStatus("offline");
-      // Retry every 8 seconds when offline
       setTimeout(() => setRetryCount((c) => c + 1), 8000);
     }
   };
 
   useEffect(() => {
+    setMounted(true);
     check();
   }, [retryCount]);
 
-  if (status === "online") return null;
+  if (!mounted || status === "online") return null;
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50">
@@ -60,13 +61,17 @@ export default function ServerStatus() {
 
 export function ServerStatusBadge() {
   const [status, setStatus] = useState<Status>("checking");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     healthApi
       .check()
       .then(() => setStatus("online"))
       .catch(() => setStatus("offline"));
   }, []);
+
+  if (!mounted) return null;
 
   return (
     <div className="flex items-center gap-1.5 text-xs">
