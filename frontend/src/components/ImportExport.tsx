@@ -64,7 +64,7 @@ export default function ImportExport() {
     "Category", "Application", "Positioning", "FG Code", "Product",
     "Product Hierarchy", "Application Type", "Geo Bucket", "Pack Size",
     "Source", "Green", "FC", "Status", "Listing", "Feasibility",
-    "KE", "Indicator 4", "Indicator 5", "Indicator 6",
+    "KE", "Indicator 4", "Indicator 5", "Indicator 6", "Image URL",
   ];
 
   const downloadTemplate = () => {

@@ -1,9 +1,14 @@
 import io
+import os
 import uuid
 import mimetypes
+import urllib.request
+from urllib.parse import urlparse
 
 import pandas as pd
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status, filters
@@ -34,6 +39,7 @@ IMPORT_COLUMN_MAP = {
     "Indicator 4": "indicator_4",
     "Indicator 5": "indicator_5",
     "Indicator 6": "indicator_6",
+    "Image URL": "image_url",
 }
 
 
@@ -63,6 +69,65 @@ class ProductViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return ProductListSerializer
         return ProductSerializer
+
+    def _is_remote_url(self, value: str) -> bool:
+        return isinstance(value, str) and value.startswith(("http://", "https://"))
+
+    def _download_remote_image(self, url: str):
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(request, timeout=20) as resp:
+                content_type = resp.headers.get_content_type() or mimetypes.guess_type(url)[0] or "application/octet-stream"
+                data = resp.read()
+                parsed = urlparse(url)
+                filename = os.path.basename(parsed.path) or "image"
+                if "." not in filename:
+                    ext = mimetypes.guess_extension(content_type) or ".jpg"
+                    filename = f"image{ext}"
+                return data, content_type, filename
+        except Exception:
+            return None, None, None
+
+    def _save_local_image(self, file_bytes: bytes, filename: str, request):
+        ext = filename.rsplit(".", 1)[-1].lower()
+        unique_name = f"product_images/{uuid.uuid4()}.{ext}"
+        default_storage.save(unique_name, ContentFile(file_bytes))
+        return request.build_absolute_uri(settings.MEDIA_URL + unique_name)
+
+    def _upload_image_to_bucket(self, file_bytes: bytes, filename: str, mime_type: str):
+        supabase_url = settings.SUPABASE_URL
+        supabase_key = settings.SUPABASE_SERVICE_KEY
+        bucket = settings.SUPABASE_BUCKET
+
+        if not (supabase_url and supabase_key):
+            raise ValueError("Supabase storage is not configured")
+
+        from supabase import create_client
+        from storage3.utils import StorageException
+
+        def bucket_missing(error: Exception) -> bool:
+            payload = error.args[0] if error.args else None
+            if isinstance(payload, dict):
+                return payload.get("error") == "Bucket not found" or payload.get("message") == "Bucket not found"
+            return "Bucket not found" in str(payload)
+
+        client = create_client(supabase_url, supabase_key)
+        try:
+            client.storage.get_bucket(bucket)
+        except StorageException as bucket_err:
+            if bucket_missing(bucket_err):
+                client.storage.create_bucket(bucket, bucket, {"public": True})
+            else:
+                raise bucket_err
+
+        ext = filename.rsplit(".", 1)[-1].lower()
+        unique_name = f"{uuid.uuid4()}.{ext}"
+        client.storage.from_(bucket).upload(
+            unique_name,
+            file_bytes,
+            {"content-type": mime_type},
+        )
+        return f"{supabase_url}/storage/v1/object/public/{bucket}/{unique_name}"
 
     @action(detail=False, methods=["post"], url_path="import-data",
             parser_classes=[MultiPartParser, FormParser])
@@ -104,6 +169,23 @@ class ProductViewSet(viewsets.ModelViewSet):
                     else:
                         row_data[field_name] = str(val).strip() if pd.notna(val) else ""
 
+            fg_code = row_data.get("fg_code")
+            image_url = row_data.get("image_url", "")
+            if self._is_remote_url(image_url) and settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
+                if settings.SUPABASE_URL not in image_url or settings.SUPABASE_BUCKET not in image_url:
+                    file_bytes, mime_type, filename = self._download_remote_image(image_url)
+                    if file_bytes and mime_type and filename:
+                        try:
+                            uploaded_url = self._upload_image_to_bucket(file_bytes, filename, mime_type)
+                            row_data["image_url"] = uploaded_url
+                        except Exception as upload_error:
+                            errors.append(
+                                f"Row {idx + 2} ({fg_code}): image upload failed ({str(upload_error)})"
+                            )
+                            row_data["image_url"] = ""
+                    else:
+                        errors.append(f"Row {idx + 2} ({fg_code}): failed to download image URL")
+                        row_data["image_url"] = ""
             fg_code = row_data.get("fg_code")
             if not fg_code:
                 errors.append(f"Row {idx + 2}: missing FG Code — skipped.")
