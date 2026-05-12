@@ -1,7 +1,20 @@
 import axios from "axios";
 import type { Product, ProductFormData, PaginatedResponse, Stats, ImportResult } from "@/types/product";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+const BASE = API_URL.replace(/\/+$/, "");
+
+function buildApiPath(path: string) {
+  return `${BASE}/${path.replace(/^\/+/, "")}`;
+}
+
+function normalizeFilters(filters: ProductFilters) {
+  return Object.entries(filters).reduce<Record<string, string>>((acc, [key, value]) => {
+    if (value === undefined || value === null || value === "") return acc;
+    acc[key] = String(value);
+    return acc;
+  }, {});
+}
 
 export const api = axios.create({
   baseURL: BASE,
@@ -43,8 +56,8 @@ export const productsApi = {
   },
 
   export: (format: "csv" | "xlsx" = "xlsx", filters: ProductFilters = {}) => {
-    const params = new URLSearchParams({ format, ...filters as Record<string, string> });
-    return `${BASE}/products/export-data/?${params}`;
+    const params = new URLSearchParams({ export_format: format, ...normalizeFilters(filters) });
+    return buildApiPath(`products/export-data/?${params.toString()}`);
   },
 
   uploadImage: (file: File) => {

@@ -43,7 +43,10 @@ export default function ImportExport() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `products_export.${format}`;
+    a.target = "_blank";
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     toast.success(`Downloading ${format.toUpperCase()}…`);
   };
 

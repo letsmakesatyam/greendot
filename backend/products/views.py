@@ -126,7 +126,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="export-data")
     def export_data(self, request):
-        fmt = request.query_params.get("format", "xlsx")
+        fmt = request.query_params.get("export_format", "xlsx")
         qs = self.filter_queryset(self.get_queryset())
         data = list(qs.values(
             "category", "application", "positioning", "fg_code", "product_name",
