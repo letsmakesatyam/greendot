@@ -181,6 +181,14 @@ class ProductViewSet(viewsets.ModelViewSet):
         if supabase_url and supabase_key:
             try:
                 from supabase import create_client
+                from storage3.utils import StorageException
+
+                def bucket_missing(error: Exception) -> bool:
+                    payload = error.args[0] if error.args else None
+                    if isinstance(payload, dict):
+                        return payload.get("error") == "Bucket not found" or payload.get("message") == "Bucket not found"
+                    return "Bucket not found" in str(payload)
+
                 client = create_client(supabase_url, supabase_key)
                 ext = file.name.rsplit(".", 1)[-1].lower()
                 unique_name = f"{uuid.uuid4()}.{ext}"
@@ -188,24 +196,18 @@ class ProductViewSet(viewsets.ModelViewSet):
                 file_bytes = file.read()
 
                 try:
-                    client.storage.from_(bucket).upload(
-                        unique_name,
-                        file_bytes,
-                        {"content_type": mime_type},
-                    )
-                except Exception as bucket_err:
-                    if "Bucket not found" in str(bucket_err):
-                        try:
-                            client.storage.create_bucket(bucket, {"public": True})
-                            client.storage.from_(bucket).upload(
-                                unique_name,
-                                file_bytes,
-                                {"content_type": mime_type},
-                            )
-                        except Exception as create_err:
-                            raise create_err
+                    client.storage.get_bucket(bucket)
+                except StorageException as bucket_err:
+                    if bucket_missing(bucket_err):
+                        client.storage.create_bucket(bucket, bucket, {"public": True})
                     else:
                         raise bucket_err
+
+                client.storage.from_(bucket).upload(
+                    unique_name,
+                    file_bytes,
+                    {"content-type": mime_type},
+                )
 
                 public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{unique_name}"
                 return Response({"url": public_url}, status=status.HTTP_201_CREATED)
