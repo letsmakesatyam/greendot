@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosProgressEvent, type AxiosResponse } from "axios";
 import type { Product, ProductFormData, PaginatedResponse, Stats, ImportResult } from "@/types/product";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -47,11 +47,15 @@ export const productsApi = {
 
   remove: (id: number) => api.delete(`/products/${id}/`),
 
-  import: (file: File) => {
+  import: (
+    file: File,
+    onUploadProgress?: (progressEvent: AxiosProgressEvent) => void,
+  ) => {
     const form = new FormData();
     form.append("file", file);
-    return api.post<ImportResult>("/products/import-data/", form, {
+    return api.post<ImportResult, AxiosResponse<ImportResult>>("/products/import-data/", form, {
       headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress,
     });
   },
 

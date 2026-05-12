@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { productsApi } from "@/lib/api";
 import type { ImportResult } from "@/types/product";
 
 export default function ImportExport() {
+  const qc = useQueryClient();
   const [importing, setImporting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -18,16 +21,23 @@ export default function ImportExport() {
       return;
     }
     setImporting(true);
+    setUploadProgress(0);
     setResult(null);
     try {
-      const { data } = await productsApi.import(file);
-      setResult(data);
-      toast.success(`Import complete — ${data.created} created, ${data.updated} updated`);
+      const response = await productsApi.import(file, (progressEvent) => {
+        if (typeof progressEvent.loaded === "number" && typeof progressEvent.total === "number") {
+          setUploadProgress(Math.min(100, Math.round((progressEvent.loaded * 100) / progressEvent.total)));
+        }
+      });
+      setResult(response.data);
+      qc.invalidateQueries({ queryKey: ["products"] });
+      toast.success(`Import complete — ${response.data.created} created, ${response.data.updated} updated`);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || "Import failed";
       toast.error(msg);
     } finally {
       setImporting(false);
+      setUploadProgress(0);
     }
   };
 
@@ -99,7 +109,11 @@ export default function ImportExport() {
           {importing ? (
             <div className="flex flex-col items-center gap-2 text-blue-600">
               <Loader2 className="w-10 h-10 animate-spin" />
-              <p className="font-medium">Importing data…</p>
+              <p className="font-medium">Uploading file…</p>
+              <p className="text-sm text-slate-500">{uploadProgress}% uploaded</p>
+              <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden mt-2">
+                <div className="h-full bg-blue-600 transition-all" style={{ width: `${uploadProgress}%` }} />
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 text-slate-400">
